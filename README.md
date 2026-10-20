@@ -22,8 +22,10 @@ button, select a folder, then select a book within that folder.
 It remembers where you were in each of the books you are listening to,
 and provides buttons to go forward/backward 15 or 30 seconds.
 
-On the phone screen, but for now not on the Android Auto screen, text
-scrolls by and the word currently being sounded out is highlighted.
+On the phone screen, text scrolls by and the word currently being
+sounded out is highlighted. On the Android Auto screen (and the media
+notification), the artwork box shows that word, highlighted, with a few
+words either side.
 
 ## Building
 

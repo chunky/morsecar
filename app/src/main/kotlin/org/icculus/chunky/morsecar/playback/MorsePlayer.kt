@@ -13,6 +13,7 @@ import androidx.core.content.ContextCompat
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.SimpleBasePlayer
@@ -21,15 +22,18 @@ import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.guava.future
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.icculus.chunky.morsecar.library.MediaId
 import org.icculus.chunky.morsecar.library.PositionStore
 import org.icculus.chunky.morsecar.library.SavedPosition
 import org.icculus.chunky.morsecar.settings.PlaybackSettings
+import org.icculus.chunky.morsecar.text.WordWindow
 import java.io.FileNotFoundException
 import java.io.IOException
 import kotlin.math.roundToLong
@@ -104,6 +108,10 @@ class MorsePlayer(
     private var suppression = Player.PLAYBACK_SUPPRESSION_REASON_NONE
     private var error: PlaybackException? = null
     private var loadFuture: ListenableFuture<Unit>? = null
+    /** The current word and its neighbors, drawn as artwork for Android Auto and the notification. */
+    private var artwork: ByteArray? = null
+    private var artworkWordStart = -1
+    private var artworkJob: Job? = null
     private var tickerJob: Job? = null
 
     private val isActivelyPlaying: Boolean
@@ -138,6 +146,7 @@ class MorsePlayer(
                 item.mediaMetadata.buildUpon()
                     .setTitle(b?.title ?: item.mediaMetadata.title)
                     .setArtist(settings.describe())
+                    .apply { artwork?.let { setArtworkData(it, MediaMetadata.PICTURE_TYPE_FRONT_COVER) } }
                     .build(),
             )
             .setDurationUs(b?.let { (it.timeline.totalMs(settings.timing) * 1000).roundToLong() } ?: C.TIME_UNSET)
@@ -197,6 +206,7 @@ class MorsePlayer(
         stopTicker()
         setNoisyReceiverRegistered(false)
         focus.abandon()
+        clearArtwork()
         engine.release()
         nowPlaying.setBook(null)
         return Futures.immediateVoidFuture()
@@ -213,6 +223,7 @@ class MorsePlayer(
             loadFuture?.cancel(false)
             mediaItem = null
             book = null
+            clearArtwork()
             playbackState = Player.STATE_IDLE
             engine.load(null, 0)
             nowPlaying.setBook(null)
@@ -243,6 +254,7 @@ class MorsePlayer(
         mediaItem = item
         book = null
         error = null
+        clearArtwork()
         engine.load(null, 0)
         nowPlaying.setBook(null)
         if (bookId == null) {
@@ -265,10 +277,8 @@ class MorsePlayer(
                     .build()
                 engine.load(loaded.timeline, start)
                 playbackState = Player.STATE_READY
-                nowPlaying.setBook(
-                    NowPlaying.Book(loaded.id, loaded.title, loaded.raw, loaded.chunks),
-                    loaded.normalized.rawOffsetOf(start),
-                )
+                nowPlaying.setBook(NowPlaying.Book(loaded.id, loaded.title, loaded.raw, loaded.chunks))
+                publishPosition(loaded, start)
                 savePosition(start)
                 updateEngine()
             } catch (e: CancellationException) {
@@ -353,7 +363,29 @@ class MorsePlayer(
     }
 
     private fun publishPosition(b: LoadedBook, index: Int) {
-        nowPlaying.setRawPosition(b.normalized.rawOffsetOf(index.coerceIn(0, b.normalized.length)))
+        val rawOffset = b.normalized.rawOffsetOf(index.coerceIn(0, b.normalized.length))
+        nowPlaying.setRawPosition(rawOffset)
+        updateArtwork(b, rawOffset)
+    }
+
+    /** Redraws the artwork when the word being sent changes (every second or few, so cheap). */
+    private fun updateArtwork(b: LoadedBook, rawOffset: Int) {
+        val window = WordWindow.around(b.raw, rawOffset) ?: return
+        if (window.currentStart == artworkWordStart) return
+        artworkWordStart = window.currentStart
+        artworkJob?.cancel()
+        artworkJob = scope.launch {
+            val png = withContext(Dispatchers.Default) { WordArtwork.render(window) }
+            if (book !== b) return@launch
+            artwork = png
+            invalidateState()
+        }
+    }
+
+    private fun clearArtwork() {
+        artworkJob?.cancel()
+        artwork = null
+        artworkWordStart = -1
     }
 
     private fun savePosition(index: Int = engine.position().charIndex) {
