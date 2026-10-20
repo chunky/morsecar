@@ -32,6 +32,9 @@ import org.icculus.chunky.morsecar.appGraph
 import org.icculus.chunky.morsecar.library.LibraryEntry
 import org.icculus.chunky.morsecar.library.MediaId
 import org.icculus.chunky.morsecar.library.bookTitle
+import org.icculus.chunky.morsecar.morse.MorsePresets
+import org.icculus.chunky.morsecar.settings.SpeedMenu
+import org.icculus.chunky.morsecar.settings.SpeedSetting
 import org.icculus.chunky.morsecar.settings.PlaybackSettings
 
 /**
@@ -62,7 +65,12 @@ class PlaybackService : MediaLibraryService() {
         scope.launch {
             graph.settings.settings.collect { settings ->
                 player.applySettings(settings)
-                session?.setMediaButtonPreferences(PlaybackCommands.buttons(settings))
+                session?.run {
+                    setMediaButtonPreferences(PlaybackCommands.buttons(settings))
+                    // Redraw the Speed tab's ✓ marks and current values in Android Auto.
+                    notifyChildrenChanged(MediaId.Speed.value, Int.MAX_VALUE, null)
+                    SpeedSetting.entries.forEach { notifyChildrenChanged(MediaId.Setting(it).value, Int.MAX_VALUE, null) }
+                }
             }
         }
         scope.launch { restoreLastBook() }
@@ -165,9 +173,41 @@ class PlaybackService : MediaLibraryService() {
                 MediaId.Folders -> LibraryItems.folders()
                 is MediaId.Book -> resolveBook(id)
                 is MediaId.Folder -> LibraryItems.folder(id.uri, graph.library.displayName(id.uri.toUri()) ?: "Folder")
-                MediaId.Info, null -> null
+                MediaId.Speed -> LibraryItems.speed()
+                is MediaId.Setting -> LibraryItems.setting(id.setting, currentSettings())
+                is MediaId.SetValue, is MediaId.Preset, MediaId.Info, null -> null
             }
             item?.let { LibraryResult.ofItem(it, null) } ?: LibraryResult.ofError(SessionError.ERROR_BAD_VALUE)
+        }
+
+        /**
+         * Tapping a Speed-tab choice in Android Auto arrives as a request to play it:
+         * apply the setting, and keep playing the current book (the player
+         * doesn't reload a book that's already loaded).
+         */
+        override fun onSetMediaItems(
+            mediaSession: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            mediaItems: List<MediaItem>,
+            startIndex: Int,
+            startPositionMs: Long,
+        ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
+            val id = mediaItems.singleOrNull()?.let { MediaId.parse(it.mediaId) }
+            if (id !is MediaId.SetValue && id !is MediaId.Preset) {
+                return super.onSetMediaItems(mediaSession, controller, mediaItems, startIndex, startPositionMs)
+            }
+            return scope.future {
+                val settings = currentSettings()
+                val updated = when (id) {
+                    is MediaId.SetValue -> SpeedMenu.apply(id.setting, id.choice, settings)
+                    is MediaId.Preset -> MorsePresets.all.firstOrNull { it.name == id.name }
+                        ?.let { settings.copy(timing = it.timing) } ?: settings
+                }
+                graph.settings.update(updated)
+                val book = player.currentMediaItem ?: lastBookItem()
+                    ?: throw UnsupportedOperationException("Speed changed; choose a book to hear it")
+                MediaSession.MediaItemsWithStartPosition(listOf(book), 0, C.TIME_UNSET)
+            }
         }
 
         /**
@@ -278,7 +318,7 @@ class PlaybackService : MediaLibraryService() {
 
     /** Children of a browse-tree node, or null if [parentId] isn't one. */
     private suspend fun children(parentId: String): List<MediaItem>? = when (val id = MediaId.parse(parentId)) {
-        MediaId.Root -> listOf(LibraryItems.recent(), LibraryItems.folders())
+        MediaId.Root -> listOf(LibraryItems.recent(), LibraryItems.folders(), LibraryItems.speed())
         MediaId.Recent -> graph.positions.snapshot().recent(RECENT_LIMIT)
             .map { LibraryItems.book(it.uri, it.title, it.position) }
             .ifEmpty { listOf(LibraryItems.info("Books you play will appear here")) }
@@ -295,8 +335,20 @@ class PlaybackService : MediaLibraryService() {
                 }
             }.ifEmpty { listOf(LibraryItems.info("No .txt books in this folder")) }
         }
-        is MediaId.Book, MediaId.Info, null -> null
+        MediaId.Speed -> {
+            val settings = currentSettings()
+            MorsePresets.all.map { LibraryItems.preset(it, settings) } +
+                SpeedSetting.entries.map { LibraryItems.setting(it, settings) }
+        }
+        is MediaId.Setting -> {
+            val settings = currentSettings()
+            val match = if (id.setting.isSpacing) listOf(LibraryItems.matchLetters(id.setting, settings)) else emptyList()
+            match + SpeedMenu.choices(id.setting).map { LibraryItems.value(id.setting, it, settings) }
+        }
+        is MediaId.Book, is MediaId.SetValue, is MediaId.Preset, MediaId.Info, null -> null
     }
+
+    private suspend fun currentSettings(): PlaybackSettings = graph.settings.settings.first()
 
     private companion object {
         const val RECENT_LIMIT = 20

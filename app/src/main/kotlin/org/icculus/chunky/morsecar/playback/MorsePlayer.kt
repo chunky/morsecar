@@ -230,6 +230,12 @@ class MorsePlayer(
             updateEngine()
             return Futures.immediateVoidFuture()
         }
+        val current = mediaItem
+        if (current != null && item.mediaId == current.mediaId && startPositionMs == C.TIME_UNSET) {
+            // Same book (e.g. tapped again in Android Auto, or a speed change from there): keep going.
+            loadFuture?.takeIf { !it.isDone }?.let { return it }
+            if (book != null) return Futures.immediateVoidFuture()
+        }
         return load(item, startPositionMs)
     }
 

@@ -42,6 +42,7 @@ import org.icculus.chunky.morsecar.morse.MorsePresets
 import org.icculus.chunky.morsecar.morse.MorseTiming
 import org.icculus.chunky.morsecar.playback.PlaybackCommands
 import org.icculus.chunky.morsecar.settings.PlaybackSettings
+import org.icculus.chunky.morsecar.settings.formatWpm
 import kotlin.math.roundToInt
 
 @Composable
