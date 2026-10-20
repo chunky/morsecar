@@ -1,5 +1,19 @@
 # MorseCar
 
+## Screenshots
+
+<p>
+  <img src="screenshots/phone-player.png" alt="Player screen: book text with the current word highlighted, transport buttons, speed presets, and sliders" width="300">
+  <img src="screenshots/phone-library.png" alt="Choose a book: Continue listening and the bundled Samples folder" width="300">
+</p>
+
+In Android Auto (the desktop head unit, set up like a 2019 Subaru Forester):
+the title line shows the previous word and the word being sent, the artwork
+shows the book, and the buttons skip ±15 and ±30 seconds or change the speed
+preset.
+
+<img src="screenshots/auto-now-playing.png" alt="Android Auto now-playing screen: title line 'Indian Sea', book-title artwork, and skip buttons" width="600">
+
 ## What?
 
 An Android app for getting better at morse code on your
@@ -31,23 +45,6 @@ Plain-text formatting (Project Gutenberg's `_italics_`; `*bold*`, `**bold**`,
 `__bold__`, `=bold=`) is shown as italics or bold on the phone, but never
 keyed. Stray markup such as footnote `*`s, and characters that can't be keyed,
 are skipped both in the Morse and on screen.
-
-## Screenshots
-
-On the phone: the player, with the word being sent highlighted, italics from
-the book's markup, and the speed sliders and presets; and choosing a book.
-
-<p>
-  <img src="screenshots/phone-player.png" alt="Player screen: book text with the current word highlighted, transport buttons, speed presets, and sliders" width="300">
-  <img src="screenshots/phone-library.png" alt="Choose a book: Continue listening and the bundled Samples folder" width="300">
-</p>
-
-In Android Auto (the desktop head unit, set up like a 2019 Subaru Forester):
-the title line shows the previous word and the word being sent, the artwork
-shows the book, and the buttons skip ±15 and ±30 seconds or change the speed
-preset.
-
-<img src="screenshots/auto-now-playing.png" alt="Android Auto now-playing screen: title line 'Indian Sea', book-title artwork, and skip buttons" width="600">
 
 ## Building
 
