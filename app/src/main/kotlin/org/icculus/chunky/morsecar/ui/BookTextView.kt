@@ -28,8 +28,12 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import org.icculus.chunky.morsecar.playback.NowPlaying
+import org.icculus.chunky.morsecar.text.DisplayText
+import org.icculus.chunky.morsecar.text.MarkupStyle
 import org.icculus.chunky.morsecar.text.TextChunks
 import kotlin.math.abs
 
@@ -43,8 +47,10 @@ fun BookTextView(book: NowPlaying.Book, rawPosition: Int, modifier: Modifier = M
     val listState = rememberLazyListState()
     var following by remember(book.id) { mutableStateOf(true) }
     val layouts = remember(book.id) { HashMap<Int, TextLayoutResult>() }
+    val displays = remember(book.id) { HashMap<Int, DisplayText>() }
+    val displayOf = { i: Int -> displays.getOrPut(i) { TextChunks.display(book.raw, book.chunks[i], book.display, book.markup) } }
     val chunkIndex = TextChunks.indexOfChunk(book.chunks, rawPosition).coerceAtLeast(0)
-    val word = TextChunks.wordAt(book.raw, rawPosition)
+    val word = TextChunks.wordAt(book.raw, rawPosition, book.display)
     val highlight = SpanStyle(
         background = MaterialTheme.colorScheme.primaryContainer,
         color = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -56,14 +62,14 @@ fun BookTextView(book: NowPlaying.Book, rawPosition: Int, modifier: Modifier = M
         }
     }
     LaunchedEffect(book.id, chunkIndex, word?.first, following) {
-        if (following && book.chunks.isNotEmpty()) scrollToWord(listState, layouts, book, chunkIndex, word)
+        if (following && book.chunks.isNotEmpty()) scrollToWord(listState, layouts, displayOf(chunkIndex), chunkIndex, word)
     }
 
     Box(modifier) {
         LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = 8.dp)) {
             itemsIndexed(book.chunks) { i, chunk ->
                 val wordHere = word?.takeIf { i == chunkIndex && it.first < chunk.end && it.last >= chunk.start }
-                ChunkText(book, i, wordHere, highlight, onLayout = { layouts[i] = it })
+                ChunkText(displayOf(i), wordHere, highlight, onLayout = { layouts[i] = it })
             }
         }
         if (!following) {
@@ -77,22 +83,30 @@ fun BookTextView(book: NowPlaying.Book, rawPosition: Int, modifier: Modifier = M
 
 @Composable
 private fun ChunkText(
-    book: NowPlaying.Book,
-    index: Int,
+    display: DisplayText,
     word: IntRange?,
     highlight: SpanStyle,
     onLayout: (TextLayoutResult) -> Unit,
 ) {
-    val chunk = book.chunks[index]
-    val display = remember(book.id, index) { TextChunks.displayText(book.raw, chunk) }
-    val text = if (word == null) {
-        AnnotatedString(display)
+    val text = if (word == null && display.styles.isEmpty()) {
+        AnnotatedString(display.text)
     } else {
         buildAnnotatedString {
-            append(display)
-            val start = (word.first - chunk.start).coerceIn(0, display.length)
-            val end = (word.last + 1 - chunk.start).coerceIn(start, display.length)
-            addStyle(highlight, start, end)
+            append(display.text)
+            for (s in display.styles) {
+                addStyle(
+                    when (s.style) {
+                        MarkupStyle.ITALIC -> SpanStyle(fontStyle = FontStyle.Italic)
+                        MarkupStyle.BOLD -> SpanStyle(fontWeight = FontWeight.Bold)
+                    },
+                    s.start, s.end,
+                )
+            }
+            if (word != null) {
+                val start = display.indexOf(word.first).coerceIn(0, display.text.length)
+                val end = display.indexOf(word.last + 1).coerceIn(start, display.text.length)
+                addStyle(highlight, start, end)
+            }
         }
     }
     Text(
@@ -108,7 +122,7 @@ private fun ChunkText(
 private suspend fun scrollToWord(
     listState: LazyListState,
     layouts: Map<Int, TextLayoutResult>,
-    book: NowPlaying.Book,
+    display: DisplayText,
     chunkIndex: Int,
     word: IntRange?,
 ) {
@@ -120,7 +134,7 @@ private suspend fun scrollToWord(
     val layout = layouts[chunkIndex]
     val lineTop = if (layout != null && word != null) {
         val textLength = layout.layoutInput.text.length
-        val offset = (word.first - book.chunks[chunkIndex].start).coerceIn(0, (textLength - 1).coerceAtLeast(0))
+        val offset = display.indexOf(word.first).coerceIn(0, (textLength - 1).coerceAtLeast(0))
         layout.getLineTop(layout.getLineForOffset(offset))
     } else {
         0f

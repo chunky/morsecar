@@ -3,7 +3,9 @@ package org.icculus.chunky.morsecar.playback
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import org.icculus.chunky.morsecar.text.BookDisplay
 import org.icculus.chunky.morsecar.text.TextChunk
+import org.icculus.chunky.morsecar.text.TextMarkup
 
 /**
  * The book text and the position being heard, for the phone's scrolling text.
@@ -12,7 +14,14 @@ import org.icculus.chunky.morsecar.text.TextChunk
  * too big to send over Binder, and the position changes several times a second.
  */
 class NowPlaying {
-    class Book(val id: String, val title: String, val raw: String, val chunks: List<TextChunk>)
+    class Book(
+        val id: String,
+        val title: String,
+        val raw: String,
+        val chunks: List<TextChunk>,
+        val markup: TextMarkup,
+        val display: BookDisplay,
+    )
 
     private val _book = MutableStateFlow<Book?>(null)
     val book: StateFlow<Book?> = _book.asStateFlow()

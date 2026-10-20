@@ -44,11 +44,13 @@ class NormalizedText internal constructor(
 class TextNormalizer(private val alphabet: MorseAlphabet = MorseAlphabet.default) {
     /**
      * Uppercases, maps typographic and accented characters to sendable ones,
-     * silently drops anything else, and collapses whitespace. A run of whitespace
-     * containing a blank line is a paragraph break; any other run is a word gap,
-     * so hard-wrapped lines read as continuous text.
+     * silently drops markup and anything else unsendable, and collapses
+     * whitespace. A run of whitespace containing a blank line is a paragraph
+     * break; any other run (including dashes used as punctuation) is a word gap,
+     * so hard-wrapped lines read as continuous text. Raw offsets for which
+     * [skip] is true (e.g. formatting markers) are dropped like unsendable ones.
      */
-    fun normalize(raw: String): NormalizedText {
+    fun normalize(raw: String, skip: (Int) -> Boolean = { false }): NormalizedText {
         val out = StringBuilder(raw.length)
         var offsets = IntArray(raw.length + 16)
         var pendingGap: Char? = null
@@ -63,10 +65,14 @@ class TextNormalizer(private val alphabet: MorseAlphabet = MorseAlphabet.default
         var i = 0
         while (i < raw.length) {
             val c = raw[i]
-            if (c.isWhitespace()) {
+            if (skip(i)) {
+                i++
+                continue
+            }
+            if (isBreakAt(raw, i)) {
                 val start = i
                 var lineBreaks = 0
-                while (i < raw.length && raw[i].isWhitespace()) {
+                while (i < raw.length && isBreakAt(raw, i)) {
                     lineBreaks += when (raw[i]) {
                         '\n', '\u0085', '\u2028' -> 1
                         '\r' -> if (raw.getOrNull(i + 1) == '\n') 0 else 1
@@ -96,7 +102,11 @@ class TextNormalizer(private val alphabet: MorseAlphabet = MorseAlphabet.default
         return NormalizedText(out.toString(), offsets.copyOf(out.length), raw.length)
     }
 
+    /** Whether [c] is keyed (as one or more symbols). Markup and unsendable characters aren't. */
+    fun sends(c: Char): Boolean = sendableFor(c).isNotEmpty()
+
     private fun sendableFor(c: Char): String {
+        if (c in MARKUP) return ""
         val upper = c.uppercaseChar()
         if (alphabet.isEncodable(upper)) return upper.toString()
         replacements[c]?.let { return it }
@@ -106,12 +116,37 @@ class TextNormalizer(private val alphabet: MorseAlphabet = MorseAlphabet.default
             .filter(alphabet::isEncodable)
     }
 
-    private companion object {
+    companion object {
+        /**
+         * Formatting, not text: Project Gutenberg marks _italics_ with underscores.
+         * ('_' has a Morse code, so it would otherwise be keyed.)
+         */
+        private val MARKUP = setOf('_')
+
+        /** Dashes used as punctuation ("word—word"), read as a pause rather than a hyphen. */
+        private val DASH_BREAKS = setOf('–', '—', '―')
+
         /** Typographic characters that Unicode decomposition doesn't map to ASCII. */
-        val replacements: Map<Char, String> = buildMap {
+        private val replacements: Map<Char, String> = buildMap {
             "‘’‚‛′`´".forEach { put(it, "'") }
             "“”„‟″«»".forEach { put(it, "\"") }
-            "‐‑‒–—―−".forEach { put(it, "-") }
+            "‐‑‒−".forEach { put(it, "-") }
+            // Letters NFKD leaves alone.
+            mapOf(
+                'æ' to "AE", 'Æ' to "AE", 'œ' to "OE", 'Œ' to "OE", 'ø' to "O", 'Ø' to "O",
+                'þ' to "TH", 'Þ' to "TH", 'ð' to "D", 'Ð' to "D", 'đ' to "D", 'Đ' to "D",
+                'ł' to "L", 'Ł' to "L", 'ħ' to "H", 'Ħ' to "H",
+            ).forEach { (c, s) -> put(c, s) }
+        }
+
+        /** A dash used as punctuation, which separates words like a space does. */
+        fun isWordBreak(c: Char): Boolean = c in DASH_BREAKS
+
+        /** Whitespace, a punctuation dash, or part of "--" (an old-style typed dash). */
+        private fun isBreakAt(raw: String, i: Int): Boolean {
+            val c = raw[i]
+            if (c.isWhitespace() || isWordBreak(c)) return true
+            return c == '-' && (raw.getOrNull(i + 1) == '-' || raw.getOrNull(i - 1) == '-')
         }
     }
 }

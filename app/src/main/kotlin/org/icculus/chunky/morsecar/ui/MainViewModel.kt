@@ -138,7 +138,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _player.value = PlayerUiState(
             connected = true,
             hasBook = c.currentMediaItem != null,
-            title = c.mediaMetadata.title?.toString() ?: c.currentMediaItem?.mediaMetadata?.title?.toString(),
+            // The item's own title: the player's title line shows the words being sent.
+            title = c.currentMediaItem?.mediaMetadata?.title?.toString(),
             isPlaying = c.isPlaying,
             playWhenReady = c.playWhenReady && c.playbackState != Player.STATE_ENDED,
             isLoading = c.playbackState == Player.STATE_BUFFERING,

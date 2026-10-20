@@ -16,6 +16,12 @@ class GutenbergTextTest {
     }
 
     @Test
+    fun findsAuthor() {
+        assertEquals("Herman Melville", GutenbergText.author(book))
+        assertNull(GutenbergText.author("Author: Nobody\nNo Gutenberg header here."))
+    }
+
+    @Test
     fun findsBodyStart() {
         assertEquals("\r\nCall me Ishmael.\r\n", book.substring(GutenbergText.bodyStart(book)))
     }

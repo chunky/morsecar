@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.media.AudioManager
 import android.net.Uri
+import android.os.Handler
 import android.os.Looper
 import androidx.annotation.OptIn
 import androidx.core.content.ContextCompat
@@ -108,10 +109,14 @@ class MorsePlayer(
     private var suppression = Player.PLAYBACK_SUPPRESSION_REASON_NONE
     private var error: PlaybackException? = null
     private var loadFuture: ListenableFuture<Unit>? = null
-    /** The current word and its neighbors, drawn as artwork for Android Auto and the notification. */
+    /** The book's title drawn as artwork, for Android Auto, the notification, and the lock screen. */
     private var artwork: ByteArray? = null
-    private var artworkWordStart = -1
     private var artworkJob: Job? = null
+    /** The previous word and the word being sent, shown as the title line there. */
+    private var sendingText: String? = null
+    private var sendingWordStart = -1
+    private var released = false
+    private val mainHandler = Handler(Looper.getMainLooper())
     private var tickerJob: Job? = null
 
     private val isActivelyPlaying: Boolean
@@ -144,7 +149,8 @@ class MorsePlayer(
             .setMediaItem(item)
             .setMediaMetadata(
                 item.mediaMetadata.buildUpon()
-                    .setTitle(b?.title ?: item.mediaMetadata.title)
+                    .setTitle(sendingText ?: b?.title ?: item.mediaMetadata.title)
+                    .setAlbumTitle(b?.title ?: item.mediaMetadata.title)
                     .setArtist(settings.describe())
                     .apply { artwork?.let { setArtworkData(it, MediaMetadata.PICTURE_TYPE_FRONT_COVER) } }
                     .build(),
@@ -206,6 +212,7 @@ class MorsePlayer(
         stopTicker()
         setNoisyReceiverRegistered(false)
         focus.abandon()
+        released = true
         clearArtwork()
         engine.release()
         nowPlaying.setBook(null)
@@ -283,8 +290,11 @@ class MorsePlayer(
                     .build()
                 engine.load(loaded.timeline, start)
                 playbackState = Player.STATE_READY
-                nowPlaying.setBook(NowPlaying.Book(loaded.id, loaded.title, loaded.raw, loaded.chunks))
+                nowPlaying.setBook(
+                    NowPlaying.Book(loaded.id, loaded.title, loaded.raw, loaded.chunks, loaded.markup, loaded.display),
+                )
                 publishPosition(loaded, start)
+                renderArtwork(loaded)
                 savePosition(start)
                 updateEngine()
             } catch (e: CancellationException) {
@@ -371,17 +381,23 @@ class MorsePlayer(
     private fun publishPosition(b: LoadedBook, index: Int) {
         val rawOffset = b.normalized.rawOffsetOf(index.coerceIn(0, b.normalized.length))
         nowPlaying.setRawPosition(rawOffset)
-        updateArtwork(b, rawOffset)
+        updateSendingText(b, rawOffset)
     }
 
-    /** Redraws the artwork when the word being sent changes (every second or few, so cheap). */
-    private fun updateArtwork(b: LoadedBook, rawOffset: Int) {
-        val window = WordWindow.around(b.raw, rawOffset) ?: return
-        if (window.currentStart == artworkWordStart) return
-        artworkWordStart = window.currentStart
+    /** Updates the title line when the word being sent changes (every second or few). */
+    private fun updateSendingText(b: LoadedBook, rawOffset: Int) {
+        val window = WordWindow.around(b.raw, rawOffset, wordsBefore = 1, wordsAfter = 0, rules = b.display) ?: return
+        if (window.currentStart == sendingWordStart) return
+        sendingWordStart = window.currentStart
+        sendingText = window.endingWithCurrent(MAX_SENDING_TEXT_CHARS)
+        // Posted, since this can run inside a handle* method, where the state is being updated.
+        mainHandler.post { if (!released) invalidateState() }
+    }
+
+    private fun renderArtwork(b: LoadedBook) {
         artworkJob?.cancel()
         artworkJob = scope.launch {
-            val png = withContext(Dispatchers.Default) { WordArtwork.render(window) }
+            val png = withContext(Dispatchers.Default) { BookArtwork.render(b.title, b.author) }
             if (book !== b) return@launch
             artwork = png
             invalidateState()
@@ -391,7 +407,8 @@ class MorsePlayer(
     private fun clearArtwork() {
         artworkJob?.cancel()
         artwork = null
-        artworkWordStart = -1
+        sendingText = null
+        sendingWordStart = -1
     }
 
     private fun savePosition(index: Int = engine.position().charIndex) {
@@ -438,6 +455,8 @@ class MorsePlayer(
         const val SKIP_LONG_MS = 30_000L
         private const val TICK_MS = 100L
         private const val SAVE_INTERVAL_MS = 10_000L
+        /** Short enough not to be cut off on the car screen; the current word is always kept. */
+        private const val MAX_SENDING_TEXT_CHARS = 24
 
         private val MEDIA3_AUDIO_ATTRIBUTES = AudioAttributes.Builder()
             .setUsage(C.USAGE_MEDIA)

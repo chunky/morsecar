@@ -63,11 +63,48 @@ class TextChunksTest {
     }
 
     @Test
-    fun displayTextUnwrapsLinesWithoutChangingLength() {
+    fun displayUnwrapsLines() {
         val raw = "one\r\ntwo\nthree"
-        val chunk = TextChunks.split(raw).single()
-        val display = TextChunks.displayText(raw, chunk)
-        assertEquals("one  two three", display)
-        assertEquals(chunk.end - chunk.start, display.length)
+        assertEquals("one two three", TextChunks.display(raw, TextChunks.split(raw).single()).text)
+    }
+
+    private fun rules(raw: String) = TextMarkup.parse(raw).let { it to BookDisplay(it) }
+
+    @Test
+    fun displayShowsMarkupAsStylesAndKeepsOffsetsLinedUp() {
+        val raw = "* Sw. and Dan. _hval_. This *big* animal"
+        val (markup, rules) = rules(raw)
+        val display = TextChunks.display(raw, TextChunks.split(raw).single(), rules, markup)
+        assertEquals("Sw. and Dan. hval. This big animal", display.text)
+        assertEquals(
+            listOf("hval" to MarkupStyle.ITALIC, "big" to MarkupStyle.BOLD),
+            display.styles.map { display.text.substring(it.start, it.end) to it.style },
+        )
+        // The highlight for "hval." (found in raw text) lands on it in the display.
+        val word = TextChunks.wordAt(raw, raw.indexOf("hval"), rules)!!
+        assertEquals("hval.", display.text.substring(display.indexOf(word.first), display.indexOf(word.last + 1)))
+    }
+
+    @Test
+    fun italicsAcrossALineBreak() {
+        val raw = "—_Webster’s\r\nDictionary._"
+        val (markup, rules) = rules(raw)
+        val display = TextChunks.display(raw, TextChunks.split(raw).single(), rules, markup)
+        assertEquals("—Webster’s Dictionary.", display.text)
+        assertEquals("Webster’s Dictionary.", display.styles.single().let { display.text.substring(it.start, it.end) })
+    }
+
+    @Test
+    fun skipsChunksWithNothingToShow() {
+        val raw = "End of chapter.\n\n*       *       *\n\nNext chapter."
+        assertEquals(listOf("End of chapter.", "Next chapter."), TextChunks.split(raw, rules = rules(raw).second).map { raw.substring(it.start, it.end) })
+    }
+
+    @Test
+    fun dashesSeparateWords() {
+        val raw = "places—stem for"
+        val rules = rules(raw).second
+        assertEquals("places", raw.substring(TextChunks.wordAt(raw, 2, rules)!!))
+        assertEquals("stem", raw.substring(TextChunks.wordAt(raw, raw.indexOf("stem"), rules)!!))
     }
 }

@@ -15,7 +15,40 @@ class TextNormalizerTest {
 
     @Test
     fun mapsTypographicPunctuation() {
-        assertEquals("\"IT'S\" - HE SAID...", norm("“It’s” — he said…"))
+        assertEquals("\"IT'S\" HE SAID...", norm("“It’s” — he said…"))
+    }
+
+    @Test
+    fun dashesUsedAsPunctuationAreWordGaps() {
+        assertEquals("PLACES STEM FOR STERN", norm("places—stem for stern"))
+        assertEquals("ONE TWO THREE", norm("one -- two--three"))
+        assertEquals("1914 1918", norm("1914–1918"))
+        assertEquals("SEA-CAPTAIN", norm("sea-captain"))  // a single hyphen is still keyed
+    }
+
+    @Test
+    fun dropsMarkup() {
+        assertEquals("IN DAN. HVALT IS ARCHED", norm("in Dan. _hvalt_ is arched"))
+        assertEquals("WEBSTER'S DICTIONARY.", norm("—_Webster’s Dictionary._"))
+        assertEquals(false, normalizer.sends('_'))
+        assertEquals(true, normalizer.sends('é'))
+    }
+
+    @Test
+    fun skipsGivenOffsets() {
+        val raw = "a =b= c"
+        assertEquals("A =B= C", normalizer.normalize(raw).text)
+        assertEquals("A B C", normalizer.normalize(raw) { it == 2 || it == 4 }.text)
+    }
+
+    @Test
+    fun spellsOutLigatures() {
+        assertEquals("AENEAS MANOEUVRE THORN", norm("Æneas manœuvre þorn"))
+    }
+
+    @Test
+    fun dropsInvisibleAndUnsendableCharacters() {
+        assertEquals("A B", norm("a\u200f \u200eb £ • # %"))
     }
 
     @Test

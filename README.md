@@ -24,8 +24,13 @@ and provides buttons to go forward/backward 15 or 30 seconds.
 
 On the phone screen, text scrolls by and the word currently being
 sounded out is highlighted. On the Android Auto screen (and the media
-notification), the artwork box shows that word, highlighted, with a few
-words either side.
+notification), the title line shows the previous word and the word being
+sent, always last, and the artwork shows the book's title.
+
+Plain-text formatting (Project Gutenberg's `_italics_`; `*bold*`, `**bold**`,
+`__bold__`, `=bold=`) is shown as italics or bold on the phone, but never
+keyed. Stray markup such as footnote `*`s, and characters that can't be keyed,
+are skipped both in the Morse and on screen.
 
 ## Building
 
