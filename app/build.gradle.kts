@@ -34,6 +34,12 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Same key as release when there is one, so Android Studio's Run and a
+            // release APK can replace each other without uninstalling (which would
+            // erase saved positions and settings).
+            signingConfigs.findByName("release")?.let { signingConfig = it }
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true

@@ -52,22 +52,36 @@ For Android Auto to list a self-installed app, enable Android Auto's developer
 mode (Android Auto settings → tap *Version* ten times), then turn on *Unknown
 sources* in its developer settings.
 
-### Release builds
+### Signing
 
-A release build is smaller and faster. To sign it with your own key, create a
-keystore once:
+Release and debug builds are both signed with your own key when
+`keystore.properties` exists in the project root (it's git-ignored). Using one
+key means Android Studio's Run and a release APK can replace each other on the
+phone without uninstalling, which would erase saved positions and settings.
 
-    keytool -genkeypair -v -keystore morsecar.jks -keyalg RSA -keysize 4096 -validity 10000 -alias morsecar
+The key lives outside the project, so cleaning or re-cloning can't delete it:
 
-then a `keystore.properties` in the project root (git-ignored, like the `.jks`):
+    ~/.android/morsecar-signing/morsecar-release.jks
+    ~/.android/morsecar-signing/keystore.properties   (password; a copy of ./keystore.properties)
 
-    storeFile=morsecar.jks
-    storePassword=...
-    keyAlias=morsecar
-    keyPassword=...
+**Back up that folder.** Without it, no future build can be installed over the
+existing app.
 
-and build with `./gradlew :app:assembleRelease`. Keep the keystore safe: updates
-must be signed with the same key. Switching between debug and release builds
-means uninstalling first, which erases saved positions and settings.
+On a new machine, copy that folder back and put a copy of its
+`keystore.properties` in the project root. Without one, builds fall back to
+Android Studio's debug key (release builds come out unsigned).
+
+To make a fresh key instead, the setup used was:
+
+    keytool -genkeypair -keystore morsecar-release.jks -storetype PKCS12 \
+      -alias morsecar -keyalg RSA -keysize 4096 -validity 10000 -dname "CN=MorseCar"
+
+with `storeFile`, `storePassword`, `keyAlias`, and `keyPassword` in
+`keystore.properties`.
+
+### Installing a release build
+
+    ./gradlew :app:assembleRelease
+    adb install -r app/build/outputs/apk/release/app-release.apk
 
 See [PLAN.md](PLAN.md) for the architecture, status, and a device testing checklist.
