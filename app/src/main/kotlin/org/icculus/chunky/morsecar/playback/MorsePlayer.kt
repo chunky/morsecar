@@ -46,7 +46,7 @@ import kotlin.math.roundToLong
  * Positions are character offsets; the player's time-based position is derived
  * from the current speeds, so changing a slider changes the duration and
  * position but never what you're hearing. Previous/next (e.g. steering-wheel
- * buttons) skip back/forward 30 s; seek back/forward skip 15 s.
+ * buttons) skip back/forward 5 words; seek back/forward skip 2 words.
  *
  * Must be used on the main thread.
  */
@@ -249,8 +249,10 @@ class MorsePlayer(
     override fun handleSeek(mediaItemIndex: Int, positionMs: Long, seekCommand: Int): ListenableFuture<*> {
         val b = book ?: return Futures.immediateVoidFuture()
         val target = when (seekCommand) {
-            Player.COMMAND_SEEK_TO_PREVIOUS -> indexAtTime(currentTimeMs() - SKIP_LONG_MS)
-            Player.COMMAND_SEEK_TO_NEXT -> indexAtTime(currentTimeMs() + SKIP_LONG_MS)
+            Player.COMMAND_SEEK_BACK -> skipWords(b, -SKIP_SHORT_WORDS)
+            Player.COMMAND_SEEK_FORWARD -> skipWords(b, SKIP_SHORT_WORDS)
+            Player.COMMAND_SEEK_TO_PREVIOUS -> skipWords(b, -SKIP_LONG_WORDS)
+            Player.COMMAND_SEEK_TO_NEXT -> skipWords(b, SKIP_LONG_WORDS)
             else -> if (positionMs == C.TIME_UNSET) 0 else indexAtTime(positionMs.toDouble())
         }
         engine.seekTo(target)
@@ -259,6 +261,36 @@ class MorsePlayer(
         savePosition(target)
         updateEngine()
         return Futures.immediateVoidFuture()
+    }
+
+    /** Skip forward or backward by [wordCount] words (negative to go back). */
+    private fun skipWords(b: LoadedBook, wordCount: Int): Int {
+        val current = engine.position().charIndex
+        var offset = current
+        val raw = b.raw
+        val rules = b.display
+
+        if (wordCount > 0) {
+            // Skip forward
+            repeat(wordCount) {
+                // Move past current word
+                while (offset < raw.length && !rules.isSeparator(raw, offset)) offset++
+                // Move past separators to next word
+                while (offset < raw.length && rules.isSeparator(raw, offset)) offset++
+            }
+        } else {
+            // Skip backward
+            repeat(-wordCount) {
+                // Move to before current position
+                offset = (offset - 1).coerceAtLeast(0)
+                // Move past any separators
+                while (offset > 0 && rules.isSeparator(raw, offset)) offset--
+                // Move to start of this word
+                while (offset > 0 && !rules.isSeparator(raw, offset - 1)) offset--
+            }
+        }
+
+        return b.timeline.wordStart(offset.coerceIn(0, b.normalized.length))
     }
 
     private fun load(item: MediaItem, startPositionMs: Long): ListenableFuture<*> {
@@ -453,6 +485,8 @@ class MorsePlayer(
     companion object {
         const val SKIP_SHORT_MS = 15_000L
         const val SKIP_LONG_MS = 30_000L
+        private const val SKIP_SHORT_WORDS = 2
+        private const val SKIP_LONG_WORDS = 5
         private const val TICK_MS = 100L
         private const val SAVE_INTERVAL_MS = 10_000L
         /** Short enough not to be cut off on the car screen; the current word is always kept. */

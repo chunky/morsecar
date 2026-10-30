@@ -5,6 +5,7 @@ import androidx.annotation.OptIn
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.CommandButton
 import androidx.media3.session.SessionCommand
+import org.icculus.chunky.morsecar.R
 import org.icculus.chunky.morsecar.settings.PlaybackSettings
 
 /** Custom session commands, and the buttons that send them (notification, lock screen, Android Auto). */
@@ -27,32 +28,27 @@ object PlaybackCommands {
         else -> null
     }
 
-    /** ±15 s beside play/pause, ±30 s next to them, and the speed preset in the overflow. */
+    /** ±2 words beside play/pause, ±5 words next to them. */
     fun buttons(settings: PlaybackSettings): List<CommandButton> = listOf(
         CommandButton.Builder(CommandButton.ICON_SKIP_BACK_15)
-            .setDisplayName("Back 15 seconds")
+            .setDisplayName("Back 2 words")
             .setSessionCommand(SKIP_BACK_15)
             .setSlots(CommandButton.SLOT_BACK)
             .build(),
         CommandButton.Builder(CommandButton.ICON_SKIP_FORWARD_15)
-            .setDisplayName("Forward 15 seconds")
+            .setDisplayName("Forward 2 words")
             .setSessionCommand(SKIP_FORWARD_15)
             .setSlots(CommandButton.SLOT_FORWARD)
             .build(),
         CommandButton.Builder(CommandButton.ICON_SKIP_BACK_30)
-            .setDisplayName("Back 30 seconds")
+            .setDisplayName("Back 5 words")
             .setSessionCommand(SKIP_BACK_30)
             .setSlots(CommandButton.SLOT_BACK_SECONDARY, CommandButton.SLOT_OVERFLOW)
             .build(),
         CommandButton.Builder(CommandButton.ICON_SKIP_FORWARD_30)
-            .setDisplayName("Forward 30 seconds")
+            .setDisplayName("Forward 5 words")
             .setSessionCommand(SKIP_FORWARD_30)
             .setSlots(CommandButton.SLOT_FORWARD_SECONDARY, CommandButton.SLOT_OVERFLOW)
-            .build(),
-        CommandButton.Builder(CommandButton.ICON_PLAYBACK_SPEED)
-            .setDisplayName("Speed: ${settings.preset?.name ?: "custom"} (tap for next preset)")
-            .setSessionCommand(NEXT_PRESET)
-            .setSlots(CommandButton.SLOT_OVERFLOW)
             .build(),
     )
 }
