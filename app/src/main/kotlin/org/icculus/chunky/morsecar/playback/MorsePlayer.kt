@@ -112,7 +112,7 @@ class MorsePlayer(
     /** The book's title drawn as artwork, for Android Auto, the notification, and the lock screen. */
     private var artwork: ByteArray? = null
     private var artworkJob: Job? = null
-    /** The previous word and the word being sent, shown as the title line there. */
+    /** The last two completed words, shown as the title line in Android Auto. */
     private var sendingText: String? = null
     private var sendingWordStart = -1
     private var released = false
@@ -386,10 +386,10 @@ class MorsePlayer(
 
     /** Updates the title line when the word being sent changes (every second or few). */
     private fun updateSendingText(b: LoadedBook, rawOffset: Int) {
-        val window = WordWindow.around(b.raw, rawOffset, wordsBefore = 1, wordsAfter = 0, rules = b.display) ?: return
+        val window = WordWindow.around(b.raw, rawOffset, wordsBefore = 2, wordsAfter = 0, rules = b.display) ?: return
         if (window.currentStart == sendingWordStart) return
         sendingWordStart = window.currentStart
-        sendingText = window.endingWithCurrent(MAX_SENDING_TEXT_CHARS)
+        sendingText = window.endingBeforeCurrent(MAX_SENDING_TEXT_CHARS)
         // Posted, since this can run inside a handle* method, where the state is being updated.
         mainHandler.post { if (!released) invalidateState() }
     }

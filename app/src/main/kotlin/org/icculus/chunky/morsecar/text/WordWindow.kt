@@ -23,6 +23,22 @@ data class WordWindow(
         return text
     }
 
+    /**
+     * Just the words before [current], dropping the earliest ones to fit [maxChars].
+     * Used to show only completed words without revealing what's currently playing.
+     */
+    fun endingBeforeCurrent(maxChars: Int): String {
+        if (before.isEmpty()) return ""
+        var text = before.last()
+        for (i in before.size - 2 downTo 0) {
+            val word = before[i]
+            val longer = "$word $text"
+            if (longer.length > maxChars) break
+            text = longer
+        }
+        return text
+    }
+
     companion object {
         /**
          * Words around [rawOffset] in [raw], as shown (hidden characters removed);
