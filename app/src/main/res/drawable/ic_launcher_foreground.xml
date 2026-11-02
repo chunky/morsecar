@@ -4,9 +4,20 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Placeholder: "-.-." (C, for Car) -->
-    <path android:fillColor="#FFFFFF" android:pathData="M28,50h14v8h-14z" />
-    <path android:fillColor="#FFFFFF" android:pathData="M46,50h6v8h-6z" />
-    <path android:fillColor="#FFFFFF" android:pathData="M56,50h14v8h-14z" />
-    <path android:fillColor="#FFFFFF" android:pathData="M74,50h6v8h-6z" />
+    <!-- LIZ in Morse code -->
+    <!-- L: dot dash dot dot -->
+    <path android:fillColor="#FFFFFF" android:pathData="M18,42h6v4h-6z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M26,42h14v4h-14z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M42,42h6v4h-6z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M50,42h6v4h-6z" />
+
+    <!-- I: dot dot -->
+    <path android:fillColor="#FFFFFF" android:pathData="M18,52h6v4h-6z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M26,52h6v4h-6z" />
+
+    <!-- Z: dash dash dot dot -->
+    <path android:fillColor="#FFFFFF" android:pathData="M18,62h14v4h-14z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M34,62h14v4h-14z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M50,62h6v4h-6z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M58,62h6v4h-6z" />
 </vector>
