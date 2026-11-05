@@ -33,6 +33,7 @@ import kotlinx.coroutines.withContext
 import org.icculus.chunky.morsecar.library.MediaId
 import org.icculus.chunky.morsecar.library.PositionStore
 import org.icculus.chunky.morsecar.library.SavedPosition
+import org.icculus.chunky.morsecar.morse.NormalizedText
 import org.icculus.chunky.morsecar.settings.PlaybackSettings
 import org.icculus.chunky.morsecar.text.WordWindow
 import java.io.FileNotFoundException
@@ -115,6 +116,9 @@ class MorsePlayer(
     /** The last two completed words, shown as the title line in Android Auto. */
     private var sendingText: String? = null
     private var sendingWordStart = -1
+    private var lastWordIndex = -1
+    private var lastPlayedWords = ArrayDeque<String>(3)
+    private var pendingRandomSeek = false
     private var released = false
     private val mainHandler = Handler(Looper.getMainLooper())
     private var tickerJob: Job? = null
@@ -256,6 +260,9 @@ class MorsePlayer(
             else -> if (positionMs == C.TIME_UNSET) 0 else indexAtTime(positionMs.toDouble())
         }
         engine.seekTo(target)
+        lastWordIndex = b.timeline.wordStart(target)
+        pendingRandomSeek = false
+        lastPlayedWords.clear()
         if (playbackState == Player.STATE_ENDED) playbackState = Player.STATE_READY
         publishPosition(b, target)
         savePosition(target)
@@ -321,6 +328,9 @@ class MorsePlayer(
                     .setMediaMetadata(item.mediaMetadata.buildUpon().setTitle(loaded.title).build())
                     .build()
                 engine.load(loaded.timeline, start)
+                lastWordIndex = loaded.timeline.wordStart(start)
+                pendingRandomSeek = false
+                lastPlayedWords.clear()
                 playbackState = Player.STATE_READY
                 nowPlaying.setBook(
                     NowPlaying.Book(loaded.id, loaded.title, loaded.raw, loaded.chunks, loaded.markup, loaded.display),
@@ -393,7 +403,56 @@ class MorsePlayer(
         tickerJob = scope.launch {
             var sinceSave = 0L
             while (isActive) {
-                book?.let { publishPosition(it, engine.position().charIndex) }
+                val b = book
+                val pos = engine.position()
+                val currentIndex = pos.charIndex
+                b?.let { publishPosition(it, currentIndex) }
+
+                // Track word completions and handle random mode
+                if (b != null && currentIndex < b.timeline.length) {
+                    val currentWordStart = b.timeline.wordStart(currentIndex)
+                    val isInGap = currentIndex < b.normalized.length && NormalizedText.isGap(b.normalized.text[currentIndex])
+
+                    // Calculate if we're near the end of the gap (80% through)
+                    // This ensures the audio buffer has drained before we seek
+                    val isNearEndOfGap = if (isInGap) {
+                        val gapDurationMs = settings.timing.durationMs(b.timeline.unitsOf(currentIndex))
+                        val gapDurationFrames = (gapDurationMs * engine.sampleRate / 1000).toLong()
+                        pos.framesIntoChar > (gapDurationFrames * 0.8).toLong()
+                    } else {
+                        false
+                    }
+
+                    // Detect when we've completed a word and moved to the next
+                    if (lastWordIndex >= 0 && currentWordStart != lastWordIndex) {
+                        // Extract the completed word and add it to history
+                        val wordEnd = findWordEnd(b, lastWordIndex)
+                        if (wordEnd > lastWordIndex) {
+                            val rawStart = b.normalized.rawOffsetOf(lastWordIndex)
+                            val rawEnd = b.normalized.rawOffsetOf(wordEnd)
+                            val word = b.raw.substring(rawStart, rawEnd.coerceAtMost(b.raw.length)).trim()
+                            if (word.isNotEmpty()) {
+                                lastPlayedWords.addLast(word)
+                                if (lastPlayedWords.size > 3) lastPlayedWords.removeFirst()
+                                updateSendingTextFromHistory()
+                            }
+                        }
+
+                        // In random mode, mark that we need to seek
+                        if (settings.randomWords) {
+                            pendingRandomSeek = true
+                        }
+
+                        lastWordIndex = currentWordStart
+                    }
+
+                    // Only seek when we're near the end of a gap to minimize buffer flush impact
+                    if (pendingRandomSeek && isNearEndOfGap) {
+                        lastWordIndex = seekToRandomWord(b)
+                        pendingRandomSeek = false
+                    }
+                }
+
                 delay(TICK_MS)
                 sinceSave += TICK_MS
                 if (sinceSave >= SAVE_INTERVAL_MS) {
@@ -402,6 +461,53 @@ class MorsePlayer(
                 }
             }
         }
+    }
+
+    private fun findWordEnd(b: LoadedBook, wordStart: Int): Int {
+        var end = wordStart
+        while (end < b.normalized.length && !NormalizedText.isGap(b.normalized.text[end])) {
+            end++
+        }
+        return end
+    }
+
+    private suspend fun seekToRandomWord(b: LoadedBook): Int {
+        // Pause briefly to let the audio buffer drain completely, preventing clicks
+        val wasPlaying = playWhenReady && playbackState == Player.STATE_READY
+        if (wasPlaying) {
+            engine.setPlaying(false)
+            delay(50) // Let hardware buffer drain
+        }
+
+        val randomIndex = (0 until b.normalized.length).random()
+        val wordStart = b.timeline.wordStart(randomIndex)
+        engine.seekTo(wordStart)
+        publishPosition(b, wordStart)
+
+        if (wasPlaying) {
+            engine.setPlaying(true)
+        }
+
+        return wordStart
+    }
+
+    private fun updateSendingTextFromHistory() {
+        if (lastPlayedWords.isEmpty()) {
+            sendingText = null
+            return
+        }
+
+        // Show the last 2 words played
+        val words = lastPlayedWords.takeLast(2)
+        val text = words.joinToString(" ")
+        if (text.length <= MAX_SENDING_TEXT_CHARS) {
+            sendingText = text
+        } else {
+            // If too long, just show the last word
+            sendingText = words.last().take(MAX_SENDING_TEXT_CHARS)
+        }
+
+        mainHandler.post { if (!released) invalidateState() }
     }
 
     private fun stopTicker() {
@@ -441,6 +547,7 @@ class MorsePlayer(
         artwork = null
         sendingText = null
         sendingWordStart = -1
+        lastPlayedWords.clear()
     }
 
     private fun savePosition(index: Int = engine.position().charIndex) {
@@ -486,7 +593,7 @@ class MorsePlayer(
         const val SKIP_SHORT_MS = 15_000L
         const val SKIP_LONG_MS = 30_000L
         private const val SKIP_SHORT_WORDS = 2
-        private const val SKIP_LONG_WORDS = 5
+        private const val SKIP_LONG_WORDS = 3
         private const val TICK_MS = 100L
         private const val SAVE_INTERVAL_MS = 10_000L
         /** Short enough not to be cut off on the car screen; the current word is always kept. */

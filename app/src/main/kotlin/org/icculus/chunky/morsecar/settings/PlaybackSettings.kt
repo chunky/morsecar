@@ -7,7 +7,7 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /** Everything the sliders control. */
-data class PlaybackSettings(val timing: MorseTiming, val toneHz: Double) {
+data class PlaybackSettings(val timing: MorseTiming, val toneHz: Double, val randomWords: Boolean = false) {
     /** The preset these speeds match, if any. */
     val preset: MorsePreset? get() = MorsePresets.all.firstOrNull { it.timing.isCloseTo(timing) }
 
@@ -26,6 +26,7 @@ data class PlaybackSettings(val timing: MorseTiming, val toneHz: Double) {
             timing.wordSpacingWpm.coerceIn(SPACING_WPM_RANGE),
         ),
         toneHz.coerceIn(TONE_HZ_RANGE),
+        randomWords,
     )
 
     /** The next preset after the current one, keeping the tone; wraps around. */

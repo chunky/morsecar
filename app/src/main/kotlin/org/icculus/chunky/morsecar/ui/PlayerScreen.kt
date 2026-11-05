@@ -22,6 +22,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -165,6 +166,16 @@ private fun SpeedControls(settings: PlaybackSettings, vm: MainViewModel) {
         }
         SettingSlider("Tone", settings.toneHz, PlaybackSettings.TONE_HZ_RANGE, TONE_STEP_HZ, "${settings.toneHz.roundToInt()} Hz") {
             vm.setToneHz(it)
+        }
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(vertical = 8.dp),
+        ) {
+            Text("Random words", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+            Switch(
+                checked = settings.randomWords,
+                onCheckedChange = { vm.setRandomWords(it) },
+            )
         }
     }
 }

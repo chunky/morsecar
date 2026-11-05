@@ -2,6 +2,7 @@ package org.icculus.chunky.morsecar.settings
 
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
@@ -26,6 +27,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             it[LETTER_SPACING_WPM] = s.timing.letterSpacingWpm
             it[WORD_SPACING_WPM] = s.timing.wordSpacingWpm
             it[TONE_HZ] = s.toneHz
+            it[RANDOM_WORDS] = s.randomWords
         }
     }
 
@@ -48,6 +50,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
                 this[WORD_SPACING_WPM] ?: d.timing.wordSpacingWpm,
             ),
             this[TONE_HZ] ?: d.toneHz,
+            this[RANDOM_WORDS] ?: d.randomWords,
         ).clamped()
     }
 
@@ -56,5 +59,6 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         val LETTER_SPACING_WPM = doublePreferencesKey("letter_spacing_wpm")
         val WORD_SPACING_WPM = doublePreferencesKey("word_spacing_wpm")
         val TONE_HZ = doublePreferencesKey("tone_hz")
+        val RANDOM_WORDS = booleanPreferencesKey("random_words")
     }
 }

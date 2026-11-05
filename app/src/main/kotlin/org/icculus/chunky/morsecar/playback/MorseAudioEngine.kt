@@ -292,8 +292,8 @@ class MorseAudioEngine(private val listener: Listener) {
             .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
             .build()
 
-        /** Short, so slider changes are heard almost immediately. */
-        private const val BUFFER_MS = 150
+        /** Large enough to buffer several letters, preventing gaps if the render thread is delayed. */
+        private const val BUFFER_MS = 1000
         private const val CHUNK_FRAMES = 480
         private const val WAIT_MS = 10L
         private const val MAX_DEAD_TRACK_RETRIES = 5

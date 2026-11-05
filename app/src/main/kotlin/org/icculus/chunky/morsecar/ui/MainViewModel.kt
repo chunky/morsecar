@@ -194,6 +194,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setToneHz(hz: Double) = setSettings(settings.value.copy(toneHz = hz))
 
+    fun setRandomWords(random: Boolean) = setSettings(settings.value.copy(randomWords = random))
+
     fun applyPreset(preset: MorsePreset) = setSettings(settings.value.copy(timing = preset.timing))
 
     private fun setSettings(s: PlaybackSettings) {
